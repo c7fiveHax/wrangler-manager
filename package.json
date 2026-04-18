@@ -1,0 +1,59 @@
+{
+  "name": "wrangler-manager",
+  "version": "1.0.0",
+  "description": "Desktop IDE for editing and deploying Wrangler HTML projects to Cloudflare",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node server.js",
+    "electron": "electron .",
+    "build": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.wrangler.manager",
+    "productName": "Wrangler Manager",
+    "copyright": "Copyright (c) 2026 Nicholas Percoco",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "index.html",
+      "server.js"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "electron/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "identity": null,
+      "hardenedRuntime": false
+    },
+    "win": {
+      "icon": "electron/icon.ico",
+      "target": "nsis"
+    },
+    "linux": {
+      "icon": "electron/icon.png",
+      "target": "AppImage"
+    }
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "author": "Nicholas Percoco",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 Nicholas Percoco"
+}

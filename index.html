@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wrangler Manager</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closetag.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/xml-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.9/beautify-html.min.js"></script>
+<style>
+  :root {
+    --bg:       #13131a;
+    --bg2:      #1a1a25;
+    --bg3:      #21212e;
+    --bg4:      #2a2a3a;
+    --border:   #2e2e42;
+    --border2:  #3a3a52;
+    --text:     #cdd6f4;
+    --text2:    #9399b2;
+    --text3:    #585b70;
+    --accent:   #89b4fa;
+    --accent2:  #7f77dd;
+    --green:    #a6e3a1;
+    --yellow:   #f9e2af;
+    --red:      #f38ba8;
+    --teal:     #94e2d5;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --font-ui:   'Inter', system-ui, sans-serif;
+    --sidebar-w: 220px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: 13px; }
+
+  /* ── Layout ── */
+  #app { display: flex; height: 100vh; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: var(--sidebar-w); min-width: var(--sidebar-w);
+    background: var(--bg2); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .app-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: .02em; margin-bottom: 10px;
+  }
+  .app-title svg { color: var(--accent); }
+  .root-display {
+    font-family: var(--font-mono); font-size: 10px; color: var(--text3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 8px; padding: 4px 8px; background: var(--bg3);
+    border-radius: 4px; border: 1px solid var(--border);
+  }
+  .btn-change-root {
+    width: 100%; padding: 5px 0; font-size: 11px; font-family: var(--font-ui);
+    color: var(--text2); background: transparent;
+    border: 1px solid var(--border2); border-radius: 5px; cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-change-root:hover { color: var(--text); border-color: var(--accent); }
+
+  .section-label {
+    font-size: 10px; font-weight: 600; color: var(--text3);
+    text-transform: uppercase; letter-spacing: .08em;
+    padding: 10px 14px 4px;
+  }
+  .project-list { overflow-y: auto; max-height: 180px; }
+  .proj-item {
+    padding: 7px 14px; cursor: pointer; border-left: 2px solid transparent;
+    transition: background .1s;
+  }
+  .proj-item:hover { background: var(--bg3); }
+  .proj-item.active { background: var(--bg3); border-left-color: var(--accent); }
+  .proj-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .proj-env  { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .proj-env span {
+    display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px;
+    background: var(--bg4); border: 1px solid var(--border2);
+  }
+  .proj-env span.prod { color: var(--green); border-color: #2d4a2a; background: #1a2e1a; }
+  .proj-env span.stag { color: var(--yellow); border-color: #4a3d1a; background: #2e2a14; }
+
+  .file-list { overflow-y: auto; flex: 1; }
+  .file-item {
+    display: flex; align-items: center; gap: 7px;
+    padding: 6px 14px; cursor: pointer; color: var(--text2);
+    font-size: 12px; font-family: var(--font-mono);
+    border-left: 2px solid transparent; transition: all .1s;
+  }
+  .file-item:hover { background: var(--bg3); color: var(--text); }
+  .file-item.active { background: var(--bg3); color: var(--accent); border-left-color: var(--accent); }
+  .file-item svg { flex-shrink: 0; }
+
+  .add-file-row {
+    padding: 8px 14px; border-top: 1px solid var(--border);
+  }
+  .btn-add-file {
+    width: 100%; padding: 5px 0; font-size: 11px; font-family: var(--font-ui);
+    color: var(--text2); background: transparent;
+    border: 1px dashed var(--border2); border-radius: 5px; cursor: pointer;
+    transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .btn-add-file:hover { color: var(--green); border-color: var(--green); }
+
+  /* ── Main ── */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+  /* ── IDE Toolbar ── */
+  #ide-toolbar {
+    display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+    padding: 6px 12px; background: var(--bg2); border-bottom: 1px solid var(--border);
+    min-height: 40px;
+  }
+  .toolbar-file {
+    font-family: var(--font-mono); font-size: 12px; color: var(--text); font-weight: 500;
+    flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .toolbar-file .proj-prefix { color: var(--text3); }
+  .tbtn {
+    padding: 4px 9px; border-radius: 4px; font-size: 11px; font-family: var(--font-ui);
+    font-weight: 500; cursor: pointer; border: 1px solid var(--border2);
+    background: transparent; color: var(--text2); white-space: nowrap; transition: all .12s;
+  }
+  .tbtn:hover { color: var(--text); border-color: var(--text3); background: var(--bg3); }
+  .tbtn:disabled { opacity: .35; cursor: default; }
+  .tbtn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
+  .tbtn.primary:hover { background: #6ea8e8; }
+  .tbtn.success { background: #2d4a2a; color: var(--green); border-color: #3d6a3a; }
+  .tbtn.success:hover { background: #3a5e37; }
+  .tbtn.preview { background: #2a2540; color: var(--accent2); border-color: #3d3560; }
+  .tbtn.preview:hover { background: #333060; }
+  .tbtn.active { color: var(--accent); border-color: var(--accent); }
+  .sep { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; margin: 0 2px; }
+  .cursor-info { font-family: var(--font-mono); font-size: 10px; color: var(--text3); white-space: nowrap; }
+  .save-badge {
+    font-size: 10px; padding: 2px 7px; border-radius: 3px; white-space: nowrap;
+    font-family: var(--font-mono);
+  }
+  .save-badge.saved   { background: #1a2e1a; color: var(--green); border: 1px solid #2d4a2a; }
+  .save-badge.unsaved { background: #2e2a14; color: var(--yellow); border: 1px solid #4a3d1a; }
+
+  /* ── Editor ── */
+  #editor-pane { flex: 1; overflow: hidden; min-height: 0; display: flex; flex-direction: column; }
+  #cm-host { flex: 1; overflow: auto; min-height: 0; }
+  #cm-host .CodeMirror {
+    height: 100%; font-family: var(--font-mono); font-size: 13px;
+    line-height: 1.65; background: #1e1e2e;
+  }
+  #cm-host .CodeMirror-scroll { min-height: 0; }
+  #cm-host .CodeMirror-gutters { background: #181825; border-right: 1px solid #2a2a3e; }
+
+  /* ── Preview panel ── */
+  #preview-panel {
+    border-top: 1px solid var(--border); display: none; flex-direction: column;
+    height: 280px;
+  }
+  #preview-panel.open { display: flex; }
+  .preview-bar {
+    display: flex; align-items: center; gap: 8px; padding: 5px 12px;
+    background: var(--bg2); border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .preview-label { font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--text3); flex: 1; }
+  #preview-frame { flex: 1; border: none; background: #fff; }
+
+  /* ── Log panel ── */
+  #log-panel {
+    height: 140px; border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .log-bar {
+    display: flex; align-items: center; gap: 8px; padding: 5px 12px;
+    background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .log-label { font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--text3); flex: 1; }
+  #log-body {
+    flex: 1; overflow-y: auto; padding: 6px 14px;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.75;
+    background: #13131a;
+  }
+  .log-line         { color: var(--text3); }
+  .log-line.stdout  { color: var(--text2); }
+  .log-line.success { color: var(--green); }
+  .log-line.error   { color: var(--red); }
+  .log-line.info    { color: var(--accent); }
+  .log-line.warn    { color: var(--yellow); }
+  .deploy-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text3); flex-shrink: 0; transition: background .3s;
+  }
+  .deploy-dot.running { background: var(--yellow); animation: pulse 1s infinite; }
+  .deploy-dot.ok      { background: var(--green); }
+  .deploy-dot.err     { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+  #deploy-status { font-size: 11px; font-family: var(--font-mono); color: var(--text3); }
+
+  /* ── Setup screens ── */
+  #setup-screen {
+    display: flex; align-items: center; justify-content: center;
+    height: 100vh; width: 100vw; background: var(--bg);
+  }
+  .setup-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 32px 36px; width: 500px; max-width: 95vw;
+  }
+  .setup-card h1 {
+    font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 4px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .setup-card h1 svg { color: var(--accent); }
+  .setup-card p { font-size: 13px; color: var(--text2); line-height: 1.6; margin: 10px 0 20px; }
+  .setup-step { font-size: 11px; color: var(--text3); margin-bottom: 14px; font-family: var(--font-mono); }
+  .input-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .input-row input {
+    flex: 1; padding: 8px 12px; background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: 6px; color: var(--text); font-family: var(--font-mono); font-size: 12px;
+    outline: none; transition: border-color .15s;
+  }
+  .input-row input:focus { border-color: var(--accent); }
+  .input-row input::placeholder { color: var(--text3); }
+  .hint { font-size: 11px; color: var(--text3); line-height: 1.5; }
+  .hint code { color: var(--teal); font-family: var(--font-mono); }
+  .scan-list {
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    margin-bottom: 20px; max-height: 260px; overflow-y: auto;
+  }
+  .scan-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background .1s;
+  }
+  .scan-item:last-child { border-bottom: none; }
+  .scan-item:hover { background: var(--bg3); }
+  .chk {
+    width: 16px; height: 16px; border-radius: 4px;
+    border: 1px solid var(--border2); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; transition: all .12s;
+  }
+  .chk.on { background: var(--accent); border-color: var(--accent); }
+  .scan-info { flex: 1; }
+  .scan-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .scan-meta { font-size: 11px; color: var(--text3); font-family: var(--font-mono); margin-top: 2px; }
+  .env-pill {
+    font-size: 10px; padding: 2px 8px; border-radius: 3px; flex-shrink: 0;
+  }
+  .env-pill.prod { background: #1a2e1a; color: var(--green); border: 1px solid #2d4a2a; }
+  .env-pill.stag { background: #2e2a14; color: var(--yellow); border: 1px solid #4a3d1a; }
+  .setup-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .sbtn {
+    padding: 7px 16px; border-radius: 6px; font-size: 12px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border2); background: transparent;
+    color: var(--text2); transition: all .15s; font-family: var(--font-ui);
+  }
+  .sbtn:hover { color: var(--text); border-color: var(--text3); }
+  .sbtn:disabled { opacity: .35; cursor: default; }
+  .sbtn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
+  .sbtn.primary:hover { background: #6ea8e8; }
+  .error-msg { font-size: 12px; color: var(--red); margin-top: 8px; padding: 8px 12px;
+    background: #2e1a1a; border: 1px solid #4a2a2a; border-radius: 6px; }
+
+  /* ── Empty state ── */
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; color: var(--text3);
+  }
+  .empty-state svg { opacity: .3; }
+  .empty-state p { font-size: 13px; }
+
+  /* ── Scrollbars ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+  /* New file input inline */
+  .new-file-input-row { display: flex; gap: 6px; padding: 6px 14px; }
+  .new-file-input-row input {
+    flex: 1; padding: 4px 8px; background: var(--bg3); border: 1px solid var(--accent);
+    border-radius: 4px; color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none;
+  }
+  .new-file-input-row button {
+    padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;
+    border: 1px solid var(--border2); background: transparent; color: var(--text2);
+  }
+  .new-file-input-row button.ok { color: var(--green); border-color: var(--green); }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const API = 'http://localhost:3474/api';
+
+// ── State ──────────────────────────────────────────────────────────────────
+const S = {
+  screen:      'setup-folder', // 'setup-folder' | 'setup-pick' | 'app'
+  rootPath:    localStorage.getItem('wm_root') || '',
+  scanned:     [],
+  selected:    new Set(),
+  projects:    JSON.parse(localStorage.getItem('wm_projects') || '[]'),
+  ap:          0,   // active project index
+  af:          '',  // active file path
+  unsaved:     false,
+  previewOpen: false,
+  addingFile:  false,
+  deployDot:   'idle',
+};
+
+let cm = null; // CodeMirror instance
+
+// If we have saved projects go straight to app
+if (S.projects.length) { S.screen = 'app'; S.af = S.projects[0].htmlFiles[0]?.path || ''; }
+else if (S.rootPath)   { S.screen = 'setup-folder'; }
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function render() {
+  const app = document.getElementById('app');
+  if (S.screen === 'setup-folder') { app.innerHTML = renderSetupFolder(); attachSetupFolder(); }
+  else if (S.screen === 'setup-pick') { app.innerHTML = renderSetupPick(); attachSetupPick(); }
+  else { app.innerHTML = renderApp(); attachApp(); initCM(); }
+}
+
+// ── Setup: folder ──────────────────────────────────────────────────────────
+function renderSetupFolder() {
+  return `
+  <div id="setup-screen">
+    <div class="setup-card">
+      <h1>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Wrangler Manager
+      </h1>
+      <p>Enter the path to the folder that contains your Wrangler projects. Each subfolder with a <code style="font-family:var(--font-mono);color:var(--teal);font-size:11px;">wrangler.toml</code> will be detected automatically.</p>
+      <div class="setup-step">Step 1 of 2 — Set root folder</div>
+      <div class="input-row">
+        <input type="text" id="pathInput" placeholder="~/projects  or  /Users/you/projects" value="${escAttr(S.rootPath)}"/>
+        <button class="sbtn" id="browseBtn" title="Browse for folder">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-2px;margin-right:4px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Browse
+        </button>
+        <button class="sbtn primary" id="scanBtn">Scan</button>
+      </div>
+      <input type="file" id="folderPicker" webkitdirectory style="display:none"/>
+      <p class="hint">Tip: use Browse to pick a folder, or type a path directly using <code>~</code> for home.</p>
+      <div id="scan-error"></div>
+    </div>
+  </div>`;
+}
+
+function attachSetupFolder() {
+  const pi = document.getElementById('pathInput');
+  const sb = document.getElementById('scanBtn');
+  const er = document.getElementById('scan-error');
+  async function doScan() {
+    const v = pi.value.trim(); if (!v) { pi.focus(); return; }
+    sb.disabled = true; sb.textContent = 'Scanning…'; er.innerHTML = '';
+    try {
+      const res = await fetch(`${API}/scan?root=${encodeURIComponent(v)}`);
+      const data = await res.json();
+      if (data.error) { er.innerHTML = `<div class="error-msg">${esc(data.error)}</div>`; sb.disabled=false; sb.textContent='Scan'; return; }
+      S.rootPath = v; localStorage.setItem('wm_root', v);
+      S.scanned = data; S.selected = new Set();
+      if (!data.length) {
+        // Run diagnose to show helpful detail
+        try {
+          const dr = await fetch(`${API}/diagnose?root=${encodeURIComponent(v)}`);
+          const dd = await dr.json();
+          S.diagnoseMeta = dd;
+        } catch {}
+      } else { S.diagnoseMeta = null; }
+      S.screen = 'setup-pick'; render();
+    } catch(e) {
+      er.innerHTML = `<div class="error-msg">Could not connect to server. Is server.js running?<br><small>${esc(e.message)}</small></div>`;
+      sb.disabled = false; sb.textContent = 'Scan';
+    }
+  }
+  sb.onclick = doScan;
+  pi.onkeydown = e => { if (e.key === 'Enter') doScan(); };
+
+  // Folder picker
+  const fp = document.getElementById('folderPicker');
+  const bb = document.getElementById('browseBtn');
+  if (bb) bb.onclick = async () => {
+    // Electron: use native dialog for a true folder path
+    if (window.electronAPI?.isElectron) {
+      const chosen = await window.electronAPI.pickFolder();
+      if (chosen) { pi.value = chosen; doScan(); }
+      return;
+    }
+    // Browser fallback: webkitdirectory gives us folder name only
+    fp.click();
+  };
+  if (fp) fp.onchange = () => {
+    if (!fp.files.length) return;
+    // Electron exposes the real path on File objects
+    if (fp.files[0].path) {
+      pi.value = fp.files[0].path.replace(/[/\\][^/\\]+$/, '');
+    } else {
+      // Plain browser: best we can do is the folder name
+      const folderName = fp.files[0].webkitRelativePath.split('/')[0];
+      pi.value = folderName;
+    }
+    fp.value = '';
+  };
+}
+
+// ── Setup: pick ────────────────────────────────────────────────────────────
+function renderSetupPick() {
+  if (!S.scanned.length) {
+    const dd = S.diagnoseMeta;
+    let detail = '';
+    if (dd && dd.children) {
+      const dirs = dd.children.filter(c => c.isDir);
+      const withToml = dd.children.filter(c => c.hasToml);
+      if (dd.selfHasToml) {
+        detail = `<p style="color:var(--yellow);font-size:12px;margin-top:8px;">This folder itself has a <code style="font-family:var(--font-mono)">wrangler.toml</code> — try entering its <strong>parent</strong> folder instead.</p>`;
+      } else if (dirs.length === 0) {
+        detail = `<p style="color:var(--text3);font-size:12px;margin-top:8px;">This folder contains no subdirectories at all.</p>`;
+      } else {
+        const names = dirs.slice(0,6).map(d => `<code style="font-family:var(--font-mono);color:var(--teal)">${esc(d.name)}</code>`).join(', ');
+        detail = `<p style="color:var(--text3);font-size:12px;margin-top:8px;">Found ${dirs.length} subfolder${dirs.length!==1?'s':''} but none had a <code style="font-family:var(--font-mono)">wrangler.toml</code>: ${names}${dirs.length>6?' …':''}</p>`;
+      }
+    }
+    return `<div id="setup-screen"><div class="setup-card">
+    <h1>No projects found</h1>
+    <p>No Wrangler projects were detected in <code style="font-family:var(--font-mono);color:var(--teal);font-size:11px;">${esc(S.rootPath)}</code>.</p>
+    ${detail}
+    <p style="font-size:12px;color:var(--text3);margin-top:12px;">Each project must have a <code style="font-family:var(--font-mono)">wrangler.toml</code> file inside it.</p>
+    <div class="setup-footer" style="margin-top:16px;"><button class="sbtn primary" onclick="S.screen='setup-folder';render()">Try a different folder</button></div>
+  </div></div>`;
+  }
+
+  const rows = S.scanned.map((p, i) => {
+    const on = S.selected.has(i);
+    const fc = p.htmlFiles.length;
+    const envClass = p.env === 'production' ? 'prod' : 'stag';
+    return `<div class="scan-item" data-i="${i}">
+      <div class="chk${on ? ' on' : ''}">${on ? `<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><polyline points="1.5,5 4,7.5 8.5,2.5" stroke="#0d1117" stroke-width="2.2"/></svg>` : ''}</div>
+      <div class="scan-info">
+        <div class="scan-name">${esc(p.name)}</div>
+        <div class="scan-meta">${esc(p.path)} &nbsp;·&nbsp; ${fc} HTML file${fc !== 1 ? 's' : ''}</div>
+      </div>
+      <span class="env-pill ${envClass}">${esc(p.env)}</span>
+    </div>`;
+  }).join('');
+
+  const n = S.selected.size;
+  return `<div id="setup-screen"><div class="setup-card">
+    <h1><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Choose projects</h1>
+    <div class="setup-step">Step 2 of 2 — ${S.scanned.length} project${S.scanned.length !== 1 ? 's' : ''} found in ${esc(S.rootPath)}</div>
+    <p>Select the projects you want to manage.</p>
+    <div class="scan-list">${rows}</div>
+    <div class="setup-footer">
+      <button class="sbtn" id="backBtn">Back</button>
+      <button class="sbtn" id="selAllBtn">${n === S.scanned.length ? 'Deselect all' : 'Select all'}</button>
+      <button class="sbtn primary" id="addBtn" ${n === 0 ? 'disabled' : ''}>Add ${n > 0 ? n + ' project' + (n > 1 ? 's' : '') : 'projects'}</button>
+    </div>
+  </div></div>`;
+}
+
+function attachSetupPick() {
+  document.querySelectorAll('.scan-item').forEach(el => {
+    el.onclick = () => {
+      const i = parseInt(el.dataset.i);
+      S.selected.has(i) ? S.selected.delete(i) : S.selected.add(i);
+      render();
+    };
+  });
+  document.getElementById('backBtn').onclick = () => { S.screen = 'setup-folder'; render(); };
+  document.getElementById('selAllBtn').onclick = () => {
+    S.selected.size === S.scanned.length ? S.selected = new Set() : S.scanned.forEach((_, i) => S.selected.add(i));
+    render();
+  };
+  document.getElementById('addBtn').onclick = () => {
+    S.projects = [...S.selected].sort().map(i => S.scanned[i]);
+    localStorage.setItem('wm_projects', JSON.stringify(S.projects));
+    S.ap = 0;
+    S.af = S.projects[0]?.htmlFiles[0]?.path || '';
+    S.unsaved = false; S.screen = 'app'; cm = null; render();
+  };
+}
+
+// ── App ────────────────────────────────────────────────────────────────────
+function renderApp() {
+  const ps = S.projects;
+  if (!ps.length) return `<div id="app" style="display:flex;align-items:center;justify-content:center;height:100vh;"><p style="color:var(--text3)">No projects. <a href="#" onclick="resetSetup()" style="color:var(--accent)">Set up projects</a></p></div>`;
+
+  const ap = ps[S.ap] || ps[0];
+  S.ap = ps.indexOf(ap);
+
+  const projRows = ps.map((p, i) => {
+    const ec = p.env === 'production' ? 'prod' : 'stag';
+    return `<div class="proj-item${i === S.ap ? ' active' : ''}" data-proj="${i}">
+      <div class="proj-name">${esc(p.name)}</div>
+      <div class="proj-env"><span class="${ec}">${esc(p.env)}</span></div>
+    </div>`;
+  }).join('');
+
+  const fileRows = (ap.htmlFiles || []).map(f => {
+    const active = f.path === S.af;
+    return `<div class="file-item${active ? ' active' : ''}" data-file="${escAttr(f.path)}">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M10 2v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
+      ${esc(f.name)}
+    </div>`;
+  }).join('');
+
+  const fname = S.af ? S.af.split('/').pop() : '';
+  const pname = ap.name;
+  const previewOpen = S.previewOpen;
+  const dotClass = S.deployDot === 'running' ? 'running' : S.deployDot === 'ok' ? 'ok' : S.deployDot === 'err' ? 'err' : '';
+  const deployStatus = S.deployDot === 'running' ? 'deploying…' : S.deployDot === 'ok' ? 'deployed' : S.deployDot === 'err' ? 'failed' : 'idle';
+
+  return `
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <div class="app-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Wrangler Manager
+      </div>
+      <div class="root-display" title="${escAttr(S.rootPath)}">${esc(S.rootPath)}</div>
+      <button class="btn-change-root" id="changeRootBtn">Change root folder</button>
+    </div>
+
+    <div class="section-label">Projects</div>
+    <div class="project-list">${projRows}</div>
+
+    <div class="section-label">HTML files</div>
+    <div class="file-list">
+      ${fileRows}
+      ${S.addingFile ? `
+        <div class="new-file-input-row">
+          <input type="text" id="newFileInput" placeholder="page.html" autofocus/>
+          <button class="ok" id="newFileOk">+</button>
+          <button id="newFileCancel">✕</button>
+        </div>` : ''}
+    </div>
+    <div class="add-file-row">
+      <button class="btn-add-file" id="addFileBtn">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.5"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.5"/></svg>
+        New HTML file
+      </button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="ide-toolbar">
+      <span class="toolbar-file"><span class="proj-prefix">${esc(pname)}/</span>${esc(fname)}</span>
+      <span class="save-badge ${S.unsaved ? 'unsaved' : 'saved'}" id="saveBadge">${S.unsaved ? '● unsaved' : '✓ saved'}</span>
+      <div class="sep"></div>
+      <button class="tbtn" id="fmtBtn" title="Format HTML (Alt+Shift+F)">Format</button>
+      <button class="tbtn" id="commentBtn" title="Toggle comment (Ctrl+/)">Comment</button>
+      <button class="tbtn" id="wrapBtn" title="Toggle word wrap">Wrap</button>
+      <button class="tbtn" id="findBtn" title="Find & replace (Ctrl+H)">Find</button>
+      <div class="sep"></div>
+      <span class="cursor-info" id="cursorInfo">Ln 1, Col 1</span>
+      <div class="sep"></div>
+      <button class="tbtn preview${previewOpen ? ' active' : ''}" id="previewBtn">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline;vertical-align:-1px;margin-right:4px;"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 5.5l4.5 2.5L6 10.5V5.5z" fill="currentColor"/></svg>Preview
+      </button>
+      <div class="sep"></div>
+      <button class="tbtn" id="saveBtn">Save</button>
+      <button class="tbtn success" id="deployBtn">Deploy ↑</button>
+    </div>
+
+    <div id="editor-pane">
+      <div id="cm-host"></div>
+    </div>
+
+    <div id="preview-panel" class="${previewOpen ? 'open' : ''}">
+      <div class="preview-bar">
+        <span class="preview-label">Preview — ${esc(fname)}</span>
+        <button class="tbtn" id="refreshPreviewBtn">Refresh</button>
+        <button class="tbtn" id="closePreviewBtn">✕ Close</button>
+      </div>
+      <iframe id="preview-frame"></iframe>
+    </div>
+
+    <div id="log-panel">
+      <div class="log-bar">
+        <span class="log-label">Deploy log</span>
+        <div class="deploy-dot ${dotClass}" id="deployDot"></div>
+        <span id="deployStatus">${deployStatus}</span>
+        <button class="tbtn" style="margin-left:auto;" id="clearLogBtn">Clear</button>
+      </div>
+      <div id="log-body"></div>
+    </div>
+  </div>`;
+}
+
+// ── App event wiring ───────────────────────────────────────────────────────
+function attachApp() {
+  // Project switching
+  document.querySelectorAll('[data-proj]').forEach(el => {
+    el.onclick = () => {
+      if (S.unsaved && !confirm('Unsaved changes — switch anyway?')) return;
+      S.ap = parseInt(el.dataset.proj);
+      S.af = S.projects[S.ap]?.htmlFiles[0]?.path || '';
+      S.unsaved = false; S.addingFile = false; cm = null; render();
+    };
+  });
+
+  // File switching
+  document.querySelectorAll('[data-file]').forEach(el => {
+    el.onclick = async () => {
+      if (S.unsaved && !confirm('Unsaved changes — switch anyway?')) return;
+      S.af = el.dataset.file; S.unsaved = false; S.addingFile = false;
+      if (cm) {
+        const content = await loadFile(S.af);
+        cm.setValue(content);
+        document.getElementById('saveBadge').className = 'save-badge saved';
+        document.getElementById('saveBadge').textContent = '✓ saved';
+        // Update file item active states
+        document.querySelectorAll('[data-file]').forEach(f => f.classList.toggle('active', f.dataset.file === S.af));
+        document.querySelector('#ide-toolbar .toolbar-file').innerHTML =
+          `<span class="proj-prefix">${esc(S.projects[S.ap].name)}/</span>${esc(S.af.split('/').pop())}`;
+        if (S.previewOpen) updatePreview();
+      } else render();
+    };
+  });
+
+  // Change root
+  document.getElementById('changeRootBtn').onclick = () => {
+    if (confirm('Change root folder? Your current project list will be cleared.')) resetSetup();
+  };
+
+  // Add new file
+  const addFileBtn = document.getElementById('addFileBtn');
+  if (addFileBtn) addFileBtn.onclick = () => { S.addingFile = true; render(); setTimeout(() => document.getElementById('newFileInput')?.focus(), 50); };
+
+  const newFileOk = document.getElementById('newFileOk');
+  const newFileCancel = document.getElementById('newFileCancel');
+  if (newFileCancel) newFileCancel.onclick = () => { S.addingFile = false; render(); };
+  if (newFileOk) newFileOk.onclick = createNewFile;
+  const nfi = document.getElementById('newFileInput');
+  if (nfi) nfi.onkeydown = e => { if (e.key === 'Enter') createNewFile(); if (e.key === 'Escape') { S.addingFile = false; render(); } };
+
+  // Toolbar buttons
+  document.getElementById('saveBtn').onclick     = saveFile;
+  document.getElementById('fmtBtn').onclick      = formatHTML;
+  document.getElementById('commentBtn').onclick  = () => cm?.execCommand('toggleComment');
+  document.getElementById('findBtn').onclick     = () => cm?.execCommand('find');
+  document.getElementById('previewBtn').onclick  = togglePreview;
+
+  document.getElementById('clearLogBtn').onclick = () => { document.getElementById('log-body').innerHTML = ''; };
+  document.getElementById('deployBtn').onclick   = deploy;
+  document.getElementById('wrapBtn').onclick     = () => {
+    if (!cm) return;
+    const w = !cm.getOption('lineWrapping');
+    cm.setOption('lineWrapping', w);
+    document.getElementById('wrapBtn').classList.toggle('active', w);
+  };
+
+  const rpBtn = document.getElementById('refreshPreviewBtn');
+  const cpBtn = document.getElementById('closePreviewBtn');
+
+  if (rpBtn) rpBtn.onclick = updatePreview;
+  if (cpBtn) cpBtn.onclick = () => { S.previewOpen = false; document.getElementById('preview-panel').className = ''; document.getElementById('previewBtn').classList.remove('active'); };
+
+
+  // Keyboard shortcuts
+  document.onkeydown = e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveFile(); }
+  };
+}
+
+// ── CodeMirror ─────────────────────────────────────────────────────────────
+async function initCM() {
+  const host = document.getElementById('cm-host');
+  if (!host || !window.CodeMirror) return;
+  if (cm) { cm.toTextArea(); cm = null; }
+
+  const content = S.af ? await loadFile(S.af) : '';
+
+  cm = CodeMirror(host, {
+    value:            content,
+    mode:             'htmlmixed',
+    theme:            'dracula',
+    lineNumbers:      true,
+    matchBrackets:    true,
+    autoCloseTags:    true,
+    autoCloseBrackets:true,
+    styleActiveLine:  true,
+    foldGutter:       true,
+    gutters:          ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+    indentUnit:       2,
+    tabSize:          2,
+    indentWithTabs:   false,
+    lineWrapping:     false,
+    extraKeys: {
+      'Ctrl-/':       'toggleComment',
+      'Cmd-/':        'toggleComment',
+      'Alt-Shift-F':  formatHTML,
+      'Ctrl-H':       'replace',
+      'Tab': cm => cm.execCommand('indentMore'),
+    },
+  });
+
+  cm.setSize('100%', '100%');
+  host.style.height = '100%';
+
+  cm.on('change', () => {
+    if (!S.unsaved) {
+      S.unsaved = true;
+      const b = document.getElementById('saveBadge');
+      if (b) { b.className = 'save-badge unsaved'; b.textContent = '● unsaved'; }
+    }
+  });
+
+  cm.on('cursorActivity', () => {
+    const c = cm.getCursor();
+    const el = document.getElementById('cursorInfo');
+    if (el) el.textContent = `Ln ${c.line + 1}, Col ${c.ch + 1}`;
+  });
+
+  if (S.previewOpen) updatePreview();
+}
+
+// ── File operations ────────────────────────────────────────────────────────
+async function loadFile(filePath) {
+  try {
+    const res  = await fetch(`${API}/file?path=${encodeURIComponent(filePath)}`);
+    const data = await res.json();
+    return data.content || '';
+  } catch { return ''; }
+}
+
+async function saveFile() {
+  if (!cm || !S.af) return;
+  const content = cm.getValue();
+  try {
+    const res  = await fetch(`${API}/file`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: S.af, content }) });
+    const data = await res.json();
+    if (data.ok) {
+      S.unsaved = false;
+      const b = document.getElementById('saveBadge');
+      if (b) { b.className = 'save-badge saved'; b.textContent = '✓ saved'; }
+      addLog('info', `Saved ${S.af.split('/').pop()}`);
+      if (S.previewOpen) updatePreview();
+    } else { addLog('error', `Save failed: ${data.error}`); }
+  } catch (e) { addLog('error', `Save error: ${e.message}`); }
+}
+
+async function createNewFile() {
+  const input = document.getElementById('newFileInput');
+  if (!input) return;
+  let name = input.value.trim();
+  if (!name) return;
+  if (!name.endsWith('.html')) name += '.html';
+  const ap = S.projects[S.ap];
+  try {
+    const res  = await fetch(`${API}/new-file`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ dir: ap.path, filename: name }) });
+    const data = await res.json();
+    if (data.ok) {
+      ap.htmlFiles.push({ name, path: data.path });
+      localStorage.setItem('wm_projects', JSON.stringify(S.projects));
+      S.af = data.path; S.unsaved = false; S.addingFile = false; cm = null; render();
+      addLog('info', `Created ${name}`);
+    } else { addLog('error', `Could not create file: ${data.error}`); }
+  } catch (e) { addLog('error', e.message); }
+}
+
+function formatHTML() {
+  if (!cm || !window.html_beautify) return;
+  const cur = cm.getCursor();
+  cm.setValue(html_beautify(cm.getValue(), { indent_size: 2, wrap_line_length: 120, end_with_newline: true }));
+  cm.setCursor(cur);
+  addLog('info', 'Formatted HTML');
+}
+
+// ── Preview ────────────────────────────────────────────────────────────────
+function togglePreview() {
+  S.previewOpen = !S.previewOpen;
+  const panel = document.getElementById('preview-panel');
+  const btn   = document.getElementById('previewBtn');
+  if (panel) panel.className = S.previewOpen ? 'open' : '';
+  if (btn)   btn.classList.toggle('active', S.previewOpen);
+  if (S.previewOpen) updatePreview();
+}
+
+function updatePreview() {
+  const frame = document.getElementById('preview-frame');
+  if (!frame || !cm) return;
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open(); doc.write(cm.getValue()); doc.close();
+}
+
+async function openInChrome() {
+  if (!S.af) return;
+  // Save first so Chrome gets the latest content
+  if (S.unsaved) await saveFile();
+  try {
+    const res  = await fetch(`${API}/preview?path=${encodeURIComponent(S.af)}`);
+    const data = await res.json();
+    if (data.error) addLog('error', `Could not open Chrome: ${data.error}`);
+    else addLog('info', `Opened ${S.af.split('/').pop()} in browser${data.fallback ? ' (default browser)' : ' (Chrome)'}`);
+  } catch (e) { addLog('error', e.message); }
+}
+
+// ── Deploy ─────────────────────────────────────────────────────────────────
+function deploy() {
+  const ap = S.projects[S.ap];
+  if (!ap) return;
+  const deployBtn = document.getElementById('deployBtn');
+  const dot       = document.getElementById('deployDot');
+  const status    = document.getElementById('deployStatus');
+  if (deployBtn) { deployBtn.disabled = true; deployBtn.textContent = 'Deploying…'; }
+  if (dot)    { dot.className = 'deploy-dot running'; S.deployDot = 'running'; }
+  if (status) status.textContent = 'deploying…';
+
+  const id  = Date.now().toString();
+  const url = `${API}/deploy-stream?projectPath=${encodeURIComponent(ap.path)}&id=${id}`;
+  const es  = new EventSource(url);
+
+  es.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'start')  addLog('info',    msg.data);
+    else if (msg.type === 'stdout') addLog('stdout',  msg.data.trim());
+    else if (msg.type === 'stderr') addLog('warn',    msg.data.trim());
+    else if (msg.type === 'error')  addLog('error',   msg.data);
+    else if (msg.type === 'done') {
+      const ok = msg.data.includes('successfully');
+      if (dot)    { dot.className = 'deploy-dot ' + (ok ? 'ok' : 'err'); S.deployDot = ok ? 'ok' : 'err'; }
+      if (status) status.textContent = ok ? 'deployed' : 'failed';
+      if (deployBtn) { deployBtn.disabled = false; deployBtn.textContent = 'Deploy ↑'; }
+      addLog(ok ? 'success' : 'error', msg.data);
+      es.close();
+    }
+  };
+  es.onerror = () => {
+    addLog('error', 'Deploy stream disconnected.');
+    if (deployBtn) { deployBtn.disabled = false; deployBtn.textContent = 'Deploy ↑'; }
+    if (dot)    { dot.className = 'deploy-dot err'; S.deployDot = 'err'; }
+    if (status) status.textContent = 'failed';
+    es.close();
+  };
+}
+
+// ── Log ────────────────────────────────────────────────────────────────────
+function addLog(type, msg) {
+  const lb = document.getElementById('log-body');
+  if (!lb || !msg) return;
+  const ts = new Date().toLocaleTimeString();
+  const el = document.createElement('div');
+  el.className = `log-line ${type}`;
+  el.textContent = `[${ts}] ${msg}`;
+  lb.appendChild(el);
+  lb.scrollTop = lb.scrollHeight;
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function esc(s)     { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s).replace(/"/g,'&quot;'); }
+function resetSetup() {
+  S.rootPath = ''; S.projects = []; S.scanned = []; S.selected = new Set();
+  S.screen = 'setup-folder'; cm = null;
+  localStorage.removeItem('wm_root'); localStorage.removeItem('wm_projects');
+  render();
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>
