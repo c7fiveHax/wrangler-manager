@@ -296,6 +296,12 @@
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 
+  /* Unsaved dot in sidebar file list */
+  .file-dirty-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--yellow); margin-left: auto; flex-shrink: 0;
+  }
+
   /* New file input inline */
   .new-file-input-row { display: flex; gap: 6px; padding: 6px 14px; }
   .new-file-input-row input {
@@ -325,7 +331,8 @@ const S = {
   projects:    JSON.parse(localStorage.getItem('wm_projects') || '[]'),
   ap:          0,   // active project index
   af:          '',  // active file path
-  unsaved:     false,
+  unsavedFiles: new Set(),
+  fileContents: {},
   previewOpen: false,
   addingFile:  false,
   deployDot:   'idle',
@@ -499,7 +506,7 @@ function attachSetupPick() {
     localStorage.setItem('wm_projects', JSON.stringify(S.projects));
     S.ap = 0;
     S.af = S.projects[0]?.htmlFiles[0]?.path || '';
-    S.unsaved = false; S.screen = 'app'; cm = null; render();
+    S.screen = 'app'; cm = null; render();
   };
 }
 
@@ -521,9 +528,10 @@ function renderApp() {
 
   const fileRows = (ap.htmlFiles || []).map(f => {
     const active = f.path === S.af;
+    const dirty  = S.unsavedFiles.has(f.path);
     return `<div class="file-item${active ? ' active' : ''}" data-file="${escAttr(f.path)}">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M10 2v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
-      ${esc(f.name)}
+      ${esc(f.name)}${dirty ? '<span class="file-dirty-dot"></span>' : ''}
     </div>`;
   }).join('');
 
@@ -568,7 +576,7 @@ function renderApp() {
   <div id="main">
     <div id="ide-toolbar">
       <span class="toolbar-file"><span class="proj-prefix">${esc(pname)}/</span>${esc(fname)}</span>
-      <span class="save-badge ${S.unsaved ? 'unsaved' : 'saved'}" id="saveBadge">${S.unsaved ? '● unsaved' : '✓ saved'}</span>
+      <span class="save-badge ${S.unsavedFiles.size > 0 ? 'unsaved' : 'saved'}" id="saveBadge">${S.unsavedFiles.size > 0 ? `● ${S.unsavedFiles.size} unsaved` : '✓ all saved'}</span>
       <div class="sep"></div>
       <button class="tbtn" id="fmtBtn" title="Format HTML (Alt+Shift+F)">Format</button>
       <button class="tbtn" id="commentBtn" title="Toggle comment (Ctrl+/)">Comment</button>
@@ -581,7 +589,7 @@ function renderApp() {
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline;vertical-align:-1px;margin-right:4px;"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 5.5l4.5 2.5L6 10.5V5.5z" fill="currentColor"/></svg>Preview
       </button>
       <div class="sep"></div>
-      <button class="tbtn" id="saveBtn">Save</button>
+      <button class="tbtn" id="saveBtn">Save All</button>
       <button class="tbtn success" id="deployBtn">Deploy ↑</button>
     </div>
 
@@ -615,29 +623,18 @@ function attachApp() {
   // Project switching
   document.querySelectorAll('[data-proj]').forEach(el => {
     el.onclick = () => {
-      if (S.unsaved && !confirm('Unsaved changes — switch anyway?')) return;
+      if (cm && S.af) S.fileContents[S.af] = cm.getValue();
       S.ap = parseInt(el.dataset.proj);
       S.af = S.projects[S.ap]?.htmlFiles[0]?.path || '';
-      S.unsaved = false; S.addingFile = false; cm = null; render();
+      S.addingFile = false; cm = null; render();
     };
   });
 
   // File switching
   document.querySelectorAll('[data-file]').forEach(el => {
-    el.onclick = async () => {
-      if (S.unsaved && !confirm('Unsaved changes — switch anyway?')) return;
-      S.af = el.dataset.file; S.unsaved = false; S.addingFile = false;
-      if (cm) {
-        const content = await loadFile(S.af);
-        cm.setValue(content);
-        document.getElementById('saveBadge').className = 'save-badge saved';
-        document.getElementById('saveBadge').textContent = '✓ saved';
-        // Update file item active states
-        document.querySelectorAll('[data-file]').forEach(f => f.classList.toggle('active', f.dataset.file === S.af));
-        document.querySelector('#ide-toolbar .toolbar-file').innerHTML =
-          `<span class="proj-prefix">${esc(S.projects[S.ap].name)}/</span>${esc(S.af.split('/').pop())}`;
-        if (S.previewOpen) updatePreview();
-      } else render();
+    el.onclick = () => {
+      if (cm && S.af) S.fileContents[S.af] = cm.getValue();
+      S.af = el.dataset.file; S.addingFile = false; cm = null; render();
     };
   });
 
@@ -658,7 +655,7 @@ function attachApp() {
   if (nfi) nfi.onkeydown = e => { if (e.key === 'Enter') createNewFile(); if (e.key === 'Escape') { S.addingFile = false; render(); } };
 
   // Toolbar buttons
-  document.getElementById('saveBtn').onclick     = saveFile;
+  document.getElementById('saveBtn').onclick     = saveAllFiles;
   document.getElementById('fmtBtn').onclick      = formatHTML;
   document.getElementById('commentBtn').onclick  = () => cm?.execCommand('toggleComment');
   document.getElementById('findBtn').onclick     = () => cm?.execCommand('find');
@@ -682,7 +679,7 @@ function attachApp() {
 
   // Keyboard shortcuts
   document.onkeydown = e => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveFile(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAllFiles(); }
   };
 }
 
@@ -692,7 +689,9 @@ async function initCM() {
   if (!host || !window.CodeMirror) return;
   if (cm) { cm.toTextArea(); cm = null; }
 
-  const content = S.af ? await loadFile(S.af) : '';
+  const content = S.af
+    ? (S.fileContents[S.af] !== undefined ? S.fileContents[S.af] : await loadFile(S.af))
+    : '';
 
   cm = CodeMirror(host, {
     value:            content,
@@ -722,10 +721,10 @@ async function initCM() {
   host.style.height = '100%';
 
   cm.on('change', () => {
-    if (!S.unsaved) {
-      S.unsaved = true;
-      const b = document.getElementById('saveBadge');
-      if (b) { b.className = 'save-badge unsaved'; b.textContent = '● unsaved'; }
+    if (!S.unsavedFiles.has(S.af)) {
+      S.unsavedFiles.add(S.af);
+      updateSaveBadge();
+      updateSidebarDot(S.af);
     }
   });
 
@@ -747,20 +746,33 @@ async function loadFile(filePath) {
   } catch { return ''; }
 }
 
-async function saveFile() {
-  if (!cm || !S.af) return;
-  const content = cm.getValue();
-  try {
-    const res  = await fetch(`${API}/file`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: S.af, content }) });
-    const data = await res.json();
-    if (data.ok) {
-      S.unsaved = false;
-      const b = document.getElementById('saveBadge');
-      if (b) { b.className = 'save-badge saved'; b.textContent = '✓ saved'; }
-      addLog('info', `Saved ${S.af.split('/').pop()}`);
-      if (S.previewOpen) updatePreview();
-    } else { addLog('error', `Save failed: ${data.error}`); }
-  } catch (e) { addLog('error', `Save error: ${e.message}`); }
+async function saveAllFiles() {
+  if (cm && S.af) S.fileContents[S.af] = cm.getValue();
+  if (S.unsavedFiles.size === 0) return;
+  const paths = [...S.unsavedFiles];
+  let savedCount = 0;
+  for (const filePath of paths) {
+    const content = S.fileContents[filePath];
+    if (content === undefined) continue;
+    try {
+      const res  = await fetch(`${API}/file`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: filePath, content }) });
+      const data = await res.json();
+      if (data.ok) {
+        S.unsavedFiles.delete(filePath);
+        updateSidebarDot(filePath);
+        savedCount++;
+      } else {
+        addLog('error', `Save failed for ${filePath.split('/').pop()}: ${data.error}`);
+      }
+    } catch (e) {
+      addLog('error', `Save error for ${filePath.split('/').pop()}: ${e.message}`);
+    }
+  }
+  if (savedCount > 0) {
+    addLog('info', `Saved ${savedCount} file${savedCount > 1 ? 's' : ''}`);
+    updateSaveBadge();
+    if (S.previewOpen) updatePreview();
+  }
 }
 
 async function createNewFile() {
@@ -776,7 +788,7 @@ async function createNewFile() {
     if (data.ok) {
       ap.htmlFiles.push({ name, path: data.path });
       localStorage.setItem('wm_projects', JSON.stringify(S.projects));
-      S.af = data.path; S.unsaved = false; S.addingFile = false; cm = null; render();
+      S.af = data.path; S.addingFile = false; cm = null; render();
       addLog('info', `Created ${name}`);
     } else { addLog('error', `Could not create file: ${data.error}`); }
   } catch (e) { addLog('error', e.message); }
@@ -810,7 +822,7 @@ function updatePreview() {
 async function openInChrome() {
   if (!S.af) return;
   // Save first so Chrome gets the latest content
-  if (S.unsaved) await saveFile();
+  if (S.unsavedFiles.has(S.af)) await saveAllFiles();
   try {
     const res  = await fetch(`${API}/preview?path=${encodeURIComponent(S.af)}`);
     const data = await res.json();
@@ -820,7 +832,12 @@ async function openInChrome() {
 }
 
 // ── Deploy ─────────────────────────────────────────────────────────────────
-function deploy() {
+async function deploy() {
+  if (cm && S.af) S.fileContents[S.af] = cm.getValue();
+  if (S.unsavedFiles.size > 0) {
+    addLog('info', 'Saving unsaved files before deploy…');
+    await saveAllFiles();
+  }
   const ap = S.projects[S.ap];
   if (!ap) return;
   const deployBtn = document.getElementById('deployBtn');
@@ -873,8 +890,33 @@ function addLog(type, msg) {
 // ── Utilities ──────────────────────────────────────────────────────────────
 function esc(s)     { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s) { return String(s).replace(/"/g,'&quot;'); }
+
+function updateSaveBadge() {
+  const b = document.getElementById('saveBadge');
+  if (!b) return;
+  const n = S.unsavedFiles.size;
+  b.className = `save-badge ${n > 0 ? 'unsaved' : 'saved'}`;
+  b.textContent = n > 0 ? `● ${n} unsaved` : '✓ all saved';
+}
+
+function updateSidebarDot(filePath) {
+  document.querySelectorAll('[data-file]').forEach(el => {
+    if (el.dataset.file !== filePath) return;
+    const dirty = S.unsavedFiles.has(filePath);
+    let dot = el.querySelector('.file-dirty-dot');
+    if (dirty && !dot) {
+      dot = document.createElement('span');
+      dot.className = 'file-dirty-dot';
+      el.appendChild(dot);
+    } else if (!dirty && dot) {
+      dot.remove();
+    }
+  });
+}
+
 function resetSetup() {
   S.rootPath = ''; S.projects = []; S.scanned = []; S.selected = new Set();
+  S.unsavedFiles = new Set(); S.fileContents = {};
   S.screen = 'setup-folder'; cm = null;
   localStorage.removeItem('wm_root'); localStorage.removeItem('wm_projects');
   render();
