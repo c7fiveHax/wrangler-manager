@@ -12,6 +12,8 @@ Built with Electron, CodeMirror, and Node.js.
 - **IDE-quality editor** — syntax highlighting for HTML, CSS, and JavaScript; line numbers; code folding; active line highlight; auto-closing tags and brackets
 - **Toolbar tools** — Format (auto-beautify), Comment toggle, Find & Replace, Word Wrap
 - **Live preview** — renders the current file in a panel inside the app
+- **Multi-file editing** — edit across multiple files without losing changes; each file tracks its own unsaved state with a dot indicator in the sidebar
+- **Save All** — saves every modified file to disk in one click (Cmd+S); deploy auto-saves before pushing
 - **One-click deploy** — runs `wrangler deploy` and streams the output live to a log panel
 - **Smart file detection** — automatically finds HTML files in the `public/` subfolder
 - **New file creation** — creates new HTML files inside `public/` to match your project structure
@@ -117,8 +119,8 @@ npm run build
 ```
 
 This produces a `dist/` folder containing:
-- `Wrangler Manager-1.0.0-arm64.dmg` — Apple Silicon (M1, M2, M3, M4)
-- `Wrangler Manager-1.0.0.dmg` — Intel
+- `Wrangler Manager-1.1.0-arm64.dmg` — Apple Silicon (M1, M2, M3, M4)
+- `Wrangler Manager-1.1.0.dmg` — Intel
 
 #### Install
 
@@ -203,7 +205,7 @@ HTML files are loaded from (in priority order):
 
 | Shortcut | Action |
 |---|---|
-| Ctrl+S / Cmd+S | Save current file |
+| Ctrl+S / Cmd+S | Save All (all modified files) |
 | Ctrl+/ / Cmd+/ | Toggle comment |
 | Alt+Shift+F | Format HTML |
 | Ctrl+H | Find & Replace |

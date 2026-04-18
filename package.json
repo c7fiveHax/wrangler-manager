@@ -1,6 +1,6 @@
 {
   "name": "wrangler-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Desktop IDE for editing and deploying Wrangler HTML projects to Cloudflare",
   "main": "electron/main.js",
   "scripts": {

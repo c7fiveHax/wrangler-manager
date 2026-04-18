@@ -257,7 +257,7 @@ function buildMenu() {
               title: 'About Wrangler Manager',
               message: 'Wrangler Manager',
               detail: [
-                'Version 1.0.0',
+                'Version 1.1.0',
                 '',
                 'A desktop IDE for editing and deploying',
                 'Cloudflare Workers (Wrangler) projects.',
