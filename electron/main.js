@@ -150,39 +150,11 @@ function startServer() {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', ...CORS });
       const send = (type, data) => res.write(`data: ${JSON.stringify({ type, data })}\n\n`);
       send('start', `Starting wrangler deploy in ${projectPath}`);
-      // Find npx by asking the user's shell for its full PATH, then locate npx within it
-      function findNpx() {
-        const home = os.homedir();
-        const candidates = [
-          '/opt/homebrew/bin/npx',
-          '/usr/local/bin/npx',
-          home + '/.volta/bin/npx',
-          home + '/.fnm/aliases/default/bin/npx',
-        ];
-        // Add every dir on process.env.PATH
-        const pathDirs = (process.env.PATH || '').split(':');
-        for (const d of pathDirs) {
-          candidates.push(d + '/npx');
-        }
-        // Also try nvm — find the active version
-        try {
-          const nvmDir = home + '/.nvm/versions/node';
-          if (fs.existsSync(nvmDir)) {
-            const versions = fs.readdirSync(nvmDir).sort().reverse();
-            for (const v of versions) {
-              candidates.push(nvmDir + '/' + v + '/bin/npx');
-            }
-          }
-        } catch {}
-        for (const c of candidates) {
-          try { if (fs.existsSync(c)) return c; } catch {}
-        }
-        return 'npx'; // last resort
-      }
-
-      const npxPath = findNpx();
-      send('info', 'Using npx at: ' + npxPath);
-      const child = spawn(npxPath, ['wrangler', 'deploy'], { cwd: projectPath, shell: false, env: { ...process.env } });
+      const userShell = process.env.SHELL || '/bin/zsh';
+      const child = spawn(userShell, ['-l', '-c', 'npx wrangler deploy'], {
+        cwd: projectPath,
+        env: { ...process.env, HOME: os.homedir() },
+      });
       child.stdout.on('data', d => send('stdout', d.toString()));
       child.stderr.on('data', d => send('stderr', d.toString()));
       child.on('close', code => { send('done', code === 0 ? 'Deploy completed successfully.' : `Deploy exited with code ${code}`); res.end(); });
