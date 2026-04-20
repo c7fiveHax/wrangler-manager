@@ -313,6 +313,17 @@
     border: 1px solid var(--border2); background: transparent; color: var(--text2);
   }
   .new-file-input-row button.ok { color: var(--green); border-color: var(--green); }
+
+  /* Environment selector */
+  .env-select {
+    padding: 3px 7px; border-radius: 4px; font-size: 11px; font-family: var(--font-ui);
+    font-weight: 500; cursor: pointer; border: 1px solid var(--border2);
+    background: var(--bg3); color: var(--text2); outline: none; height: 24px;
+  }
+  .env-select:focus { border-color: var(--accent); color: var(--text); }
+
+  /* Tail button active state */
+  .tbtn.tail-active { background: #2a1a2e; color: #cba6f7; border-color: #6b3e8e; }
 </style>
 </head>
 <body>
@@ -322,26 +333,48 @@
 <script>
 const API = 'http://localhost:3474/api';
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+function projectFiles(p) {
+  if (p && p.files && p.files.length) return p.files;
+  return (p && p.htmlFiles || []).map(f => ({ ...f, ext: 'html' }));
+}
+
+function modeForFile(filePath) {
+  const ext = (filePath || '').split('.').pop().toLowerCase();
+  if (ext === 'html') return 'htmlmixed';
+  if (ext === 'js' || ext === 'mjs' || ext === 'ts') return 'javascript';
+  if (ext === 'css') return 'css';
+  return null;
+}
+
+const EXT_COLORS = {
+  html: 'var(--yellow)', js: '#f7df1e', mjs: '#f7df1e',
+  ts: '#4d9fd6', css: 'var(--teal)', toml: 'var(--text3)',
+};
+
 // ── State ──────────────────────────────────────────────────────────────────
 const S = {
-  screen:      'setup-folder', // 'setup-folder' | 'setup-pick' | 'app'
-  rootPath:    localStorage.getItem('wm_root') || '',
-  scanned:     [],
-  selected:    new Set(),
-  projects:    JSON.parse(localStorage.getItem('wm_projects') || '[]'),
-  ap:          0,   // active project index
-  af:          '',  // active file path
+  screen:       'setup-folder', // 'setup-folder' | 'setup-pick' | 'app'
+  rootPath:     localStorage.getItem('wm_root') || '',
+  scanned:      [],
+  selected:     new Set(),
+  projects:     JSON.parse(localStorage.getItem('wm_projects') || '[]'),
+  ap:           0,   // active project index
+  af:           '',  // active file path
   unsavedFiles: new Set(),
   fileContents: {},
-  previewOpen: false,
-  addingFile:  false,
-  deployDot:   'idle',
+  previewOpen:  false,
+  addingFile:   false,
+  deployDot:    'idle',
+  selectedEnvs: {},  // project index → env name string
+  tailing:      false,
+  tailEs:       null,
 };
 
 let cm = null; // CodeMirror instance
 
 // If we have saved projects go straight to app
-if (S.projects.length) { S.screen = 'app'; S.af = S.projects[0].htmlFiles[0]?.path || ''; }
+if (S.projects.length) { S.screen = 'app'; S.af = projectFiles(S.projects[0])[0]?.path || ''; }
 else if (S.rootPath)   { S.screen = 'setup-folder'; }
 
 // ── Render ─────────────────────────────────────────────────────────────────
@@ -505,7 +538,7 @@ function attachSetupPick() {
     S.projects = [...S.selected].sort().map(i => S.scanned[i]);
     localStorage.setItem('wm_projects', JSON.stringify(S.projects));
     S.ap = 0;
-    S.af = S.projects[0]?.htmlFiles[0]?.path || '';
+    S.af = projectFiles(S.projects[0] || {})[0]?.path || '';
     S.screen = 'app'; cm = null; render();
   };
 }
@@ -526,11 +559,12 @@ function renderApp() {
     </div>`;
   }).join('');
 
-  const fileRows = (ap.htmlFiles || []).map(f => {
-    const active = f.path === S.af;
-    const dirty  = S.unsavedFiles.has(f.path);
+  const fileRows = projectFiles(ap).map(f => {
+    const active     = f.path === S.af;
+    const dirty      = S.unsavedFiles.has(f.path);
+    const iconColor  = EXT_COLORS[f.ext] || 'currentColor';
     return `<div class="file-item${active ? ' active' : ''}" data-file="${escAttr(f.path)}">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M10 2v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
+      <svg style="color:${iconColor}" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M10 2v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
       ${esc(f.name)}${dirty ? '<span class="file-dirty-dot"></span>' : ''}
     </div>`;
   }).join('');
@@ -555,7 +589,7 @@ function renderApp() {
     <div class="section-label">Projects</div>
     <div class="project-list">${projRows}</div>
 
-    <div class="section-label">HTML files</div>
+    <div class="section-label">Files</div>
     <div class="file-list">
       ${fileRows}
       ${S.addingFile ? `
@@ -590,7 +624,12 @@ function renderApp() {
       </button>
       <div class="sep"></div>
       <button class="tbtn" id="saveBtn">Save All</button>
+      ${(ap.environments || []).length ? `<select class="env-select" id="envSelect">
+        <option value="">default env</option>
+        ${(ap.environments || []).map(e => `<option value="${escAttr(e)}"${S.selectedEnvs[S.ap]===e?' selected':''}>${esc(e)}</option>`).join('')}
+      </select>` : ''}
       <button class="tbtn success" id="deployBtn">Deploy ↑</button>
+      <button class="tbtn${S.tailing ? ' tail-active' : ''}" id="tailBtn">${S.tailing ? 'Stop Tail' : 'Tail ↓'}</button>
     </div>
 
     <div id="editor-pane">
@@ -625,7 +664,7 @@ function attachApp() {
     el.onclick = () => {
       if (cm && S.af) S.fileContents[S.af] = cm.getValue();
       S.ap = parseInt(el.dataset.proj);
-      S.af = S.projects[S.ap]?.htmlFiles[0]?.path || '';
+      S.af = projectFiles(S.projects[S.ap] || {})[0]?.path || '';
       S.addingFile = false; cm = null; render();
     };
   });
@@ -660,6 +699,16 @@ function attachApp() {
   document.getElementById('commentBtn').onclick  = () => cm?.execCommand('toggleComment');
   document.getElementById('findBtn').onclick     = () => cm?.execCommand('find');
   document.getElementById('previewBtn').onclick  = togglePreview;
+  document.getElementById('tailBtn').onclick     = tailLogs;
+
+  const envSel = document.getElementById('envSelect');
+  if (envSel) envSel.onchange = () => { S.selectedEnvs[S.ap] = envSel.value; };
+
+  // Disable format/preview for non-HTML files
+  const isHtml = S.af && S.af.toLowerCase().endsWith('.html');
+  document.getElementById('fmtBtn').disabled = !isHtml;
+  const previewBtn = document.getElementById('previewBtn');
+  if (previewBtn) previewBtn.style.opacity = isHtml ? '' : '0.35';
 
   document.getElementById('clearLogBtn').onclick = () => { document.getElementById('log-body').innerHTML = ''; };
   document.getElementById('deployBtn').onclick   = deploy;
@@ -695,7 +744,7 @@ async function initCM() {
 
   cm = CodeMirror(host, {
     value:            content,
-    mode:             'htmlmixed',
+    mode:             modeForFile(S.af),
     theme:            'dracula',
     lineNumbers:      true,
     matchBrackets:    true,
@@ -796,6 +845,7 @@ async function createNewFile() {
 
 function formatHTML() {
   if (!cm || !window.html_beautify) return;
+  if (!S.af || !S.af.toLowerCase().endsWith('.html')) return;
   const cur = cm.getCursor();
   cm.setValue(html_beautify(cm.getValue(), { indent_size: 2, wrap_line_length: 120, end_with_newline: true }));
   cm.setCursor(cur);
@@ -831,6 +881,46 @@ async function openInChrome() {
   } catch (e) { addLog('error', e.message); }
 }
 
+// ── Tail ───────────────────────────────────────────────────────────────────
+async function tailLogs() {
+  if (S.tailing) {
+    if (S.tailEs) { S.tailEs.close(); S.tailEs = null; }
+    S.tailing = false;
+    const btn = document.getElementById('tailBtn');
+    if (btn) { btn.textContent = 'Tail ↓'; btn.classList.remove('tail-active'); }
+    addLog('info', 'Tail stopped.');
+    return;
+  }
+  const ap = S.projects[S.ap];
+  if (!ap) return;
+  S.tailing = true;
+  const btn = document.getElementById('tailBtn');
+  if (btn) { btn.textContent = 'Stop Tail'; btn.classList.add('tail-active'); }
+  const env = S.selectedEnvs[S.ap] || '';
+  const id  = 'tail-' + Date.now();
+  const url = `${API}/tail-stream?projectPath=${encodeURIComponent(ap.path)}&id=${id}${env ? '&env=' + encodeURIComponent(env) : ''}`;
+  S.tailEs  = new EventSource(url);
+  S.tailEs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'start')        addLog('info',   msg.data);
+    else if (msg.type === 'stdout')  addLog('stdout', msg.data.trim());
+    else if (msg.type === 'stderr')  addLog('warn',   msg.data.trim());
+    else if (msg.type === 'error')   addLog('error',  msg.data);
+    else if (msg.type === 'done') {
+      S.tailing = false; S.tailEs = null;
+      const b = document.getElementById('tailBtn');
+      if (b) { b.textContent = 'Tail ↓'; b.classList.remove('tail-active'); }
+      addLog('info', msg.data);
+    }
+  };
+  S.tailEs.onerror = () => {
+    addLog('error', 'Tail stream disconnected.');
+    S.tailing = false; S.tailEs = null;
+    const b = document.getElementById('tailBtn');
+    if (b) { b.textContent = 'Tail ↓'; b.classList.remove('tail-active'); }
+  };
+}
+
 // ── Deploy ─────────────────────────────────────────────────────────────────
 async function deploy() {
   if (cm && S.af) S.fileContents[S.af] = cm.getValue();
@@ -847,8 +937,9 @@ async function deploy() {
   if (dot)    { dot.className = 'deploy-dot running'; S.deployDot = 'running'; }
   if (status) status.textContent = 'deploying…';
 
+  const env = S.selectedEnvs[S.ap] || '';
   const id  = Date.now().toString();
-  const url = `${API}/deploy-stream?projectPath=${encodeURIComponent(ap.path)}&id=${id}`;
+  const url = `${API}/deploy-stream?projectPath=${encodeURIComponent(ap.path)}&id=${id}${env ? '&env=' + encodeURIComponent(env) : ''}`;
   const es  = new EventSource(url);
 
   es.onmessage = e => {

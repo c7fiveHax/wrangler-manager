@@ -119,8 +119,8 @@ npm run build
 ```
 
 This produces a `dist/` folder containing:
-- `Wrangler Manager-1.1.0-arm64.dmg` — Apple Silicon (M1, M2, M3, M4)
-- `Wrangler Manager-1.1.0.dmg` — Intel
+- `Wrangler Manager-1.2.0-arm64.dmg` — Apple Silicon (M1, M2, M3, M4)
+- `Wrangler Manager-1.2.0.dmg` — Intel
 
 #### Install
 

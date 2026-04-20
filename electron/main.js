@@ -24,19 +24,49 @@ function parseProject(projectDir, fallbackName) {
   try {
     const toml        = fs.readFileSync(tomlPath, 'utf8');
     const nameMatch   = toml.match(/^name\s*=\s*["']?([^"'\n]+)["']?/m);
-    const envMatch    = toml.match(/^\[env\.(\w+)\]/m);
     const bucketMatch = toml.match(/bucket\s*=\s*["']?([^"'\n]+)["']?/m);
     const name        = nameMatch ? nameMatch[1].trim() : fallbackName;
-    const env         = envMatch  ? envMatch[1]          : 'production';
-    const bucketDir   = bucketMatch ? path.resolve(projectDir, bucketMatch[1].trim()) : null;
-    const publicDir   = path.join(projectDir, 'public');
-    const htmlRoot    = (bucketDir && fs.existsSync(bucketDir))
-      ? bucketDir
-      : fs.existsSync(publicDir) ? publicDir : projectDir;
-    const htmlFiles   = fs.readdirSync(htmlRoot)
-      .filter(f => f.endsWith('.html'))
-      .map(f => ({ name: f, path: path.join(htmlRoot, f) }));
-    return { name, folderName: path.basename(projectDir), path: projectDir, htmlRoot, env, htmlFiles };
+
+    const environments = [...toml.matchAll(/^\[env\.(\w+)\]/gm)].map(m => m[1]);
+    const env          = environments[0] || 'production';
+
+    const bucketDir = bucketMatch ? path.resolve(projectDir, bucketMatch[1].trim()) : null;
+    const publicDir = path.join(projectDir, 'public');
+    const htmlRoot  = (bucketDir && fs.existsSync(bucketDir))
+      ? bucketDir : fs.existsSync(publicDir) ? publicDir : projectDir;
+
+    const seenPaths = new Set();
+    const files     = [];
+    const SRC_EXTS  = new Set(['.js', '.ts', '.mjs', '.css']);
+
+    function addFile(absPath, displayName) {
+      if (seenPaths.has(absPath)) return;
+      try { if (!fs.statSync(absPath).isFile()) return; } catch { return; }
+      seenPaths.add(absPath);
+      files.push({ name: displayName, path: absPath, ext: path.extname(absPath).slice(1).toLowerCase() });
+    }
+
+    try {
+      fs.readdirSync(htmlRoot).filter(f => f.endsWith('.html'))
+        .forEach(f => addFile(path.join(htmlRoot, f), f));
+    } catch {}
+    const srcDir = path.join(projectDir, 'src');
+    if (fs.existsSync(srcDir)) {
+      try {
+        fs.readdirSync(srcDir, { withFileTypes: true })
+          .filter(e => e.isFile() && (SRC_EXTS.has(path.extname(e.name).toLowerCase()) || e.name.endsWith('.html')))
+          .forEach(e => addFile(path.join(srcDir, e.name), 'src/' + e.name));
+      } catch {}
+    }
+    try {
+      fs.readdirSync(projectDir, { withFileTypes: true })
+        .filter(e => e.isFile() && SRC_EXTS.has(path.extname(e.name).toLowerCase()))
+        .forEach(e => addFile(path.join(projectDir, e.name), e.name));
+    } catch {}
+    addFile(tomlPath, 'wrangler.toml');
+
+    const htmlFiles = files.filter(f => f.ext === 'html');
+    return { name, folderName: path.basename(projectDir), path: projectDir, htmlRoot, env, environments, files, htmlFiles };
   } catch { return null; }
 }
 
@@ -149,15 +179,38 @@ function startServer() {
       if (!projectPath || !id) return jsonRes(res, { error: 'projectPath and id required' }, 400);
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', ...CORS });
       const send = (type, data) => res.write(`data: ${JSON.stringify({ type, data })}\n\n`);
-      send('start', `Starting wrangler deploy in ${projectPath}`);
+      const env = url.searchParams.get('env') || '';
+      send('start', `Starting wrangler deploy in ${projectPath}${env ? ` (env: ${env})` : ''}`);
+      const deployCmd = env ? `npx wrangler deploy --env ${env}` : 'npx wrangler deploy';
       const userShell = process.env.SHELL || '/bin/zsh';
-      const child = spawn(userShell, ['-l', '-c', 'npx wrangler deploy'], {
+      const child = spawn(userShell, ['-l', '-c', deployCmd], {
         cwd: projectPath,
-        env: { ...process.env, HOME: os.homedir() },
+        env: { ...process.env, HOME: os.homedir(), NO_COLOR: '1' },
       });
       child.stdout.on('data', d => send('stdout', d.toString()));
       child.stderr.on('data', d => send('stderr', d.toString()));
       child.on('close', code => { send('done', code === 0 ? 'Deploy completed successfully.' : `Deploy exited with code ${code}`); res.end(); });
+      child.on('error', err => { send('error', err.message); res.end(); });
+      req.on('close', () => child.kill());
+      return;
+    }
+
+    if (route === '/api/tail-stream' && req.method === 'GET') {
+      const projectPath = url.searchParams.get('projectPath');
+      const id          = url.searchParams.get('id');
+      const env         = url.searchParams.get('env') || '';
+      if (!projectPath || !id) return jsonRes(res, { error: 'projectPath and id required' }, 400);
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', ...CORS });
+      const send = (type, data) => res.write(`data: ${JSON.stringify({ type, data })}\n\n`);
+      send('start', `Connecting to wrangler tail${env ? ` --env ${env}` : ''}…`);
+      const tailCmd = env ? `npx wrangler tail --env ${env}` : 'npx wrangler tail';
+      const child = spawn(process.env.SHELL || '/bin/zsh', ['-l', '-c', tailCmd], {
+        cwd: projectPath,
+        env: { ...process.env, HOME: os.homedir(), NO_COLOR: '1' },
+      });
+      child.stdout.on('data', d => send('stdout', d.toString()));
+      child.stderr.on('data', d => send('stderr', d.toString()));
+      child.on('close', code => { send('done', `Tail stopped${code && code !== 0 ? ` (code ${code})` : ''}`); res.end(); });
       child.on('error', err => { send('error', err.message); res.end(); });
       req.on('close', () => child.kill());
       return;
@@ -229,7 +282,7 @@ function buildMenu() {
               title: 'About Wrangler Manager',
               message: 'Wrangler Manager',
               detail: [
-                'Version 1.1.0',
+                'Version 1.2.0',
                 '',
                 'A desktop IDE for editing and deploying',
                 'Cloudflare Workers (Wrangler) projects.',
